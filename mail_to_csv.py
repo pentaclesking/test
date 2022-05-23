@@ -164,7 +164,7 @@ except Exception as e:
     send_message(f"Ошибка в программе {__file__}\n{str(e)}\n{traceback.format_exc()}")
     raise
 
-
+print('eeee')
 # from_date = datetime.date.today() - datetime.timedelta(constants.days_ago)
 # save_attachments_only('Zoho2', from_date)
 
