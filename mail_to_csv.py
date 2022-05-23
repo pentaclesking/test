@@ -43,7 +43,7 @@ def send_message(message):
     bot.send_message(constants.admin_tg, message)
 
 
-def is_already_processed(filename):
+def already_processed(filename):
     with open(constants.log, mode='r', encoding='utf-8') as f:
         line_list = [line.rstrip('\n') for line in f]
     return True if filename in line_list else False
@@ -69,7 +69,7 @@ def parse_xls(sh, first, fop):
     lines = []
     for i in range(first, sh.max_row + 1):
         if str(sh.cell(i, constants.npp_clmn).value).isdecimal():
-            lines.append(f'{sh.cell(i, 9).value};{constants.fops[fop]["kassa"]};{sh.cell(i, 4).value};'
+            lines.append(f'{sh.cell(i, 9).value};{constants.fops[fop]};{sh.cell(i, 4).value};'
                          f'{sh.cell(i, 5).value};{sh.cell(i, 3).value};{constants.edrpou_np}\n')
     if lines:
         with open(constants.out_path + 'file.csv', 'a', encoding='utf-8') as f:
@@ -81,6 +81,12 @@ def find_first_row(sh):
     for i in range(1, sh.max_row + 1):
         if sh.cell(i, constants.npp_clmn).value == 1:
             return i
+
+
+def define_fop(file_name):
+    for fop in constants.fops:
+        if fop in file_name:
+            return fop
 
 
 def check_columns(sh, row):
@@ -98,9 +104,14 @@ def remove_all_files(dir):
 
 
 def set_work_dir():
+    # print('file:', __file__)      # D:/User/Dropbox/Python/Mail/mail_to_csv.py
+    # print('dir:', os.path.dirname(__file__))  # D:/User/Dropbox/Python/Mail  or '' if cmd is python mail_to_csv.py
+    # if os.path.dirname(__file__) != '':
+    #     os.chdir(os.path.dirname(__file__))
     abspath = os.path.abspath(__file__)
     dname = os.path.dirname(abspath)
     os.chdir(dname)
+    # print(abspath, dname)  # D:\User\Dropbox\Python\Mail\mail_to_csv.py D:\User\Dropbox\Python\Mail
 
 
 def process_file(fop, file):
@@ -124,37 +135,31 @@ def process_file(fop, file):
         return True
 
 
-def process_attachments(fop):
+def process_mail(mail):
     os.makedirs(xls_path, exist_ok=True)
     remove_all_files(xls_path)
 
     from_date = datetime.date.today() - datetime.timedelta(constants.days_ago)
-    with MailBox(constants.fops[fop]['server']).login(constants.fops[fop]['login'], constants.fops[fop]['password'], 'INBOX') as mailbox:
+    with MailBox(mail['server']).login(mail['login'], mail['password'], 'INBOX') as mailbox:
         for msg in mailbox.fetch(AND(date_gte=datetime.date(from_date.year, from_date.month, from_date.day))):
             for att in msg.attachments:
                 filename = att.filename.replace(':', '').replace('/', '').replace('\\', '')
-                if fop.lower() not in filename.lower() or 'xls' not in filename.lower():
-                    print(filename, '--- not reestr ---')
-                    continue
-                if is_already_processed(filename):
-                    print(filename,  '--- already processed, skipping ---')
-                else:
+                fop = define_fop(filename)
+                if fop and 'xls' in filename.lower() and not already_processed(filename):
+                    print('--- Start processing ---:', filename)
                     with open(xls_path + filename, 'wb') as f:
                         f.write(att.payload)
                     if process_file(fop, filename):
                         add_to_log(filename)
-                        print(filename, '--- Successfully processed and added to log---')
-
-
-def process_fop(fop):
-    process_attachments(fop)
+                        print('--- Successfully processed and added to log---:', filename)
+                else:
+                    print('--- Skipping---:', filename)
 
 
 try:
     set_work_dir()
-    for fop in constants.fops:
-        print('Processing FOP', fop)
-        process_fop(fop)
+    for mail in constants.mail_boxes:
+        process_mail(mail)
 except Exception as e:
     send_message(f"Ошибка в программе {__file__}\n{str(e)}\n{traceback.format_exc()}")
     raise
